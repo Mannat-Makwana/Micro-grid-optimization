@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Professional off-grid microgrid energy management prototype">
+<title>System Configuration · Microgrid Energy Optimizer</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/mockData.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js" defer></script>
+</head>
+<body data-page="system">
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-kicker">MICROGRID</div><h1>Energy Optimizer</h1><p>Off-grid operations console</p></div>
+  <div class="nav-label">Operations</div>
+  <nav class="nav" aria-label="Primary navigation">
+    <a href="index.html" data-page="dashboard"><span class="nav-icon">⌂</span>Dashboard</a>
+    <a href="forecast.html" data-page="forecast"><span class="nav-icon">◔</span>Forecast</a>
+    <a href="dispatch.html" data-page="dispatch"><span class="nav-icon">≋</span>Dispatch</a>
+    <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
+    <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
+  </nav>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+</aside>
+<main class="main">
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+
+<section class="page">
+<header class="page-head"><div><div class="eyebrow">Configuration</div><h2>System</h2><p>Optimization preferences and prototype system status</p></div><div class="timestamp">Prototype<br><strong>Backend not connected</strong></div></header>
+<div class="grid settings-grid">
+ <article class="card setting"><h3>Optimization Preference</h3><label for="preference"><span>Cost</span><span>Emissions</span></label><input class="range" id="preference" type="range" min="0" max="100" step="5" value="55"><div class="metric-sub" id="preferenceValue"></div></article>
+ <article class="card setting"><h3>Minimum Battery Reserve</h3><label for="reserveInput"><span>Configured SOC</span><strong>%</strong></label><input class="select" id="reserveInput" type="number" min="0" max="100" value="40"></article>
+ <article class="card setting"><h3>Diesel Maximum Output</h3><label for="dieselInput"><span>Generator limit</span><strong>kW</strong></label><input class="select" id="dieselInput" type="number" min="0" max="500" value="100"></article>
+ <article class="card setting"><h3>Planning Horizon</h3><label for="horizonInput"><span>Rolling horizon</span><strong>hours</strong></label><input class="select" id="horizonInput" type="number" min="1" max="72" value="24"></article>
+ <article class="card setting"><h3>Diesel Availability</h3><label for="dieselAvailability"><span>Operating state</span></label><select class="select" id="dieselAvailability"><option>Available</option><option>Unavailable</option></select></article>
+ <article class="card setting"><h3>Forecast Update Interval</h3><label for="intervalInput"><span>Refresh cadence</span><strong>minutes</strong></label><input class="select" id="intervalInput" type="number" min="5" max="60" value="15"></article>
+</div>
+<article class="card section-gap"><div class="card-head"><h3>System Configuration</h3><span>Mock configuration</span></div><div class="card-body"><div class="system-list">
+ <div class="system-row"><span>Optimization Preference</span><strong id="preferenceValueRow">Cost / emissions trade-off</strong></div>
+ <div class="system-row"><span>Minimum Battery Reserve</span><strong>40%</strong></div>
+ <div class="system-row"><span>Diesel Maximum Output</span><strong>100 kW</strong></div>
+ <div class="system-row"><span>Planning Horizon</span><strong>24 hours</strong></div>
+ </div></div></article>
+<article class="card section-gap"><div class="card-head"><h3>Optimization Status</h3><span>Prototype connectivity</span></div><div class="card-body"><div class="system-list">
+ <div class="system-row"><span>Optimizer</span><strong>Ready</strong></div><div class="system-row"><span>Forecast Model</span><strong>Active</strong></div><div class="system-row"><span>Data Feed</span><strong>Mock Data</strong></div><div class="system-row"><span>Backend</span><strong>Not Connected</strong></div>
+ </div></div></article>
+<div class="info-box section-gap"><h3>Architecture note</h3><p>Current UI → mock service layer → dashboard. Future UI → FastAPI REST API → forecasting models + MILP optimization engine → dispatch plan. No backend calls are made by this prototype.</p></div>
+<p class="footer-note">Settings are local prototype controls and are not persisted to a backend.</p>
+</section>
+<script src="js/system.js" defer></script>
+
+</main>
+</div>
+</body>
+</html>

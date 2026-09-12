@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Professional off-grid microgrid energy management prototype">
+<title>24-Hour Forecast · Microgrid Energy Optimizer</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/mockData.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js" defer></script>
+</head>
+<body data-page="forecast">
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-kicker">MICROGRID</div><h1>Energy Optimizer</h1><p>Off-grid operations console</p></div>
+  <div class="nav-label">Operations</div>
+  <nav class="nav" aria-label="Primary navigation">
+    <a href="index.html" data-page="dashboard"><span class="nav-icon">⌂</span>Dashboard</a>
+    <a href="forecast.html" data-page="forecast"><span class="nav-icon">◔</span>Forecast</a>
+    <a href="dispatch.html" data-page="dispatch"><span class="nav-icon">≋</span>Dispatch</a>
+    <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
+    <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
+  </nav>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+</aside>
+<main class="main">
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+
+<section class="page">
+<header class="page-head"><div><div class="eyebrow">Forecasting</div><h2>24-Hour Forecast</h2><p>Predicted demand and renewable generation</p></div><div class="timestamp">Forecast updated<br><strong>10 minutes ago</strong></div></header>
+<div class="grid stat-grid">
+ <article class="card stat"><small>Electricity Demand · Current</small><strong id="demandCurrent">—</strong></article><article class="card stat"><small>Peak demand</small><strong id="demandPeak">—</strong></article><article class="card stat"><small>Average demand</small><strong id="demandAvg">—</strong></article>
+ <article class="card stat"><small>Solar · Current</small><strong id="solarCurrent">—</strong></article><article class="card stat"><small>Solar peak</small><strong id="solarPeak">—</strong></article><article class="card stat"><small>Solar average</small><strong id="solarAvg">—</strong></article>
+ <article class="card stat"><small>Wind · Current</small><strong id="windCurrent">—</strong></article><article class="card stat"><small>Wind peak</small><strong id="windPeak">—</strong></article><article class="card stat"><small>Wind average</small><strong id="windAvg">—</strong></article>
+</div>
+<article class="card chart-card"><div class="card-head"><h3>Combined 24-Hour Forecast</h3><span>Predicted values · model output</span></div><div class="chart-container"><canvas id="forecastChart"></canvas></div></article>
+<div class="grid two-col section-gap">
+ <article class="card"><div class="card-head"><h3>Demand Forecast</h3><span>Predicted load</span></div><div class="card-body"><p class="explain">Expected site demand rises into the evening peak, reaching the highest load around 20:00 before declining overnight.</p></div></article>
+ <article class="card"><div class="card-head"><h3>Renewable Forecast</h3><span>Predicted availability</span></div><div class="card-body"><p class="explain">Solar availability peaks around midday. Wind remains comparatively steady, providing a baseline renewable contribution across the day.</p></div></article>
+</div>
+<p class="footer-note">Forecast is distinct from optimized dispatch. The eventual ML model will predict demand, solar availability and wind availability.</p>
+</section>
+<script src="js/forecast.js" defer></script>
+
+</main>
+</div>
+</body>
+</html>

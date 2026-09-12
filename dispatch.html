@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Professional off-grid microgrid energy management prototype">
+<title>Optimized Dispatch · Microgrid Energy Optimizer</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/mockData.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js" defer></script>
+</head>
+<body data-page="dispatch">
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-kicker">MICROGRID</div><h1>Energy Optimizer</h1><p>Off-grid operations console</p></div>
+  <div class="nav-label">Operations</div>
+  <nav class="nav" aria-label="Primary navigation">
+    <a href="index.html" data-page="dashboard"><span class="nav-icon">⌂</span>Dashboard</a>
+    <a href="forecast.html" data-page="forecast"><span class="nav-icon">◔</span>Forecast</a>
+    <a href="dispatch.html" data-page="dispatch"><span class="nav-icon">≋</span>Dispatch</a>
+    <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
+    <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
+  </nav>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+</aside>
+<main class="main">
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+
+<section class="page">
+<header class="page-head"><div><div class="eyebrow">Optimization</div><h2>Optimized Dispatch</h2><p>24-hour energy allocation plan</p></div><div class="timestamp">Plan Status<br><span class="plan-badge">Optimized</span></div></header>
+<div class="grid kpi-strip">
+ <article class="card kpi"><small>Total Renewable Energy</small><strong id="renewableTotal">—</strong></article><article class="card kpi"><small>Battery Throughput</small><strong id="batteryThroughput">—</strong></article><article class="card kpi"><small>Diesel Energy</small><strong id="dieselEnergy">—</strong></article><article class="card kpi"><small>Estimated Cost</small><strong id="dispatchCost">—</strong></article><article class="card kpi"><small>Estimated CO₂</small><strong id="dispatchCo2">—</strong></article>
+</div>
+<article class="card section-gap"><div class="card-head"><h3>24-Hour Allocation</h3><span>Next 24 hours · planned</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Demand</th><th>Solar</th><th>Wind</th><th>Battery</th><th>Diesel</th></tr></thead><tbody id="dispatchRows"></tbody></table></div></article>
+<div class="grid two-col section-gap">
+ <article class="card"><div class="card-head"><h3>Why this dispatch?</h3><span>Optimization rationale</span></div><div class="card-body"><p class="explain">The optimizer reduces diesel generation during periods of high renewable availability and preserves battery energy for periods when renewable generation is expected to fall. Battery charging is scheduled when renewable output can support it without violating the configured reserve.</p></div></article>
+ <article class="card"><div class="card-head"><h3>Plan Metadata</h3><span>Prototype state</span></div><div class="card-body"><div class="system-list"><div class="system-row"><span>Planning Horizon</span><strong>Next 24 hours</strong></div><div class="system-row"><span>Last Updated</span><strong>10:32 AM</strong></div><div class="system-row"><span>Optimization Engine</span><strong>Not Connected</strong></div></div></div></article>
+</div>
+<p class="footer-note">This table represents an optimized plan, not measured generator output.</p>
+</section>
+<script src="js/dispatch.js" defer></script>
+
+</main>
+</div>
+</body>
+</html>
