@@ -1,2 +1,0 @@
-# Micro-grid-optimization
---

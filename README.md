@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Microgrid Energy Mix Optimizer for Off-Grid Communities
 
 A smart energy management system designed to optimize electricity generation and storage for off-grid communities. The system combines solar, wind, battery storage, and diesel generation to meet demand reliably while minimizing operating costs, diesel dependency, and CO₂ emissions.
@@ -25,3 +26,22 @@ Forecasting: Machine Learning
 Optimization: Mixed-Integer Linear Programming (MILP)
 
 Project Status: HackOut’26 prototype. The current system is being developed with simulated data, with real forecasting models, optimization, and microgrid data integration planned as subsequent components.
+=======
+# Microgrid Energy Mix Optimizer
+
+Intelligent Energy Management System for a representative
+off-grid rural community in Kutch, Gujarat.
+
+Pipeline:
+Data -> Forecasting -> MILP Optimization -> Dispatch Simulation
+-> API -> Dashboard + LLM Operator Copilot
+
+Main components:
+- LSTM 24-hour electricity demand forecasting
+- Solar and wind forecasting
+- MILP energy dispatch optimization
+- Battery and diesel simulation
+- Rolling-horizon re-optimization
+- Backend API
+- Dashboard and AI operator interface
+>>>>>>> e4441d0 ( structure commit)
