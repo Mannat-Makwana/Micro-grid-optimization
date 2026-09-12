@@ -1,0 +1,28 @@
+location:
+  name: Representative Kutch Community
+  latitude: 23.7337
+  longitude: 69.8597
+  timezone: Asia/Kolkata
+community:
+  households: 100
+battery:
+  capacity_kwh: 500
+  max_charge_kw: 150
+  max_discharge_kw: 150
+  min_soc: 0.20
+  max_soc: 0.95
+  initial_soc: 0.60
+  charge_efficiency: 0.95
+  discharge_efficiency: 0.95
+diesel:
+  capacity_kw: 250
+  minimum_output_kw: 50
+  fuel_l_per_kwh: 0.25
+  fuel_price_inr_per_l: 90
+  co2_kg_per_l: 2.68
+renewables:
+  solar_capacity_kw: 300
+  wind_capacity_kw: 150
+optimization:
+  emission_weight: 0.5
+  reserve_margin: 0.10

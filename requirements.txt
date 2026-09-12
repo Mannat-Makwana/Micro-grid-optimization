@@ -3,12 +3,10 @@ numpy
 scikit-learn
 tensorflow
 matplotlib
-seaborn
 pyyaml
 joblib
 fastapi
 uvicorn
-pydantic
 pulp
 requests
 python-dotenv

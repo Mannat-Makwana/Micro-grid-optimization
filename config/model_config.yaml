@@ -1,0 +1,6 @@
+forecast:
+  lookback_hours: 168
+  horizon_hours: 24
+  batch_size: 64
+  epochs: 50
+  learning_rate: 0.001
