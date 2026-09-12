@@ -24,7 +24,7 @@ OUTPUT_FILE = (
 SOLAR_CAPACITY_KW = 300.0
 WIND_CAPACITY_KW = 150.0
 
-SOLAR_EFFICIENCY = 0.20
+SOLAR_PERFORMANCE_RATIO = 0.85
 
 WIND_CUT_IN_MPS = 3.0
 WIND_RATED_MPS = 12.0
@@ -38,7 +38,7 @@ WIND_CUT_OUT_MPS = 25.0
 def solar_power_from_ghi(
     ghi_w_m2,
     capacity_kw=SOLAR_CAPACITY_KW,
-    efficiency=SOLAR_EFFICIENCY
+    performance_ratio=SOLAR_PERFORMANCE_RATIO
 ):
 
     ghi = np.maximum(
@@ -47,12 +47,12 @@ def solar_power_from_ghi(
     )
 
     power = (
-        capacity_kw
-        *
-        (ghi / 1000.0)
-        *
-        efficiency
-    )
+    capacity_kw
+    *
+    (ghi / 1000.0)
+    *
+    performance_ratio
+)
 
     power = np.minimum(
         power,

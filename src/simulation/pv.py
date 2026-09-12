@@ -4,50 +4,48 @@ import numpy as np
 def pv_power_from_irradiance(
     irradiance_w_m2,
     capacity_kw,
-    system_efficiency=0.20,
+    performance_ratio=0.85
 ):
     """
-    Estimate available PV power from GHI.
+    Estimate PV output from solar irradiance.
 
     Parameters
     ----------
-    irradiance_w_m2 : float or array-like
-        Global horizontal irradiance.
+    irradiance_w_m2 : array-like
+        Global horizontal irradiance in W/m².
+
     capacity_kw : float
-        Installed PV capacity.
-    system_efficiency : float
-        Simplified PV/system efficiency.
+        Installed PV capacity in kW.
+
+    performance_ratio : float
+        Accounts for inverter, temperature, wiring,
+        dust and other system losses.
 
     Returns
     -------
-    float or np.ndarray
+    numpy.ndarray
         Available PV power in kW.
     """
 
-    irradiance = np.asarray(
-        irradiance_w_m2,
-        dtype=float
-    )
-
     irradiance = np.maximum(
-        irradiance,
+        np.asarray(irradiance_w_m2, dtype=float),
         0
     )
 
-    # Simple proportional PV model.
-    power = (
+    # Ideal PV output
+    power_kw = (
         capacity_kw
         * irradiance
         / 1000.0
     )
 
-    # Apply system efficiency.
-    power *= system_efficiency / 0.20
+    # Apply system losses
+    power_kw *= performance_ratio
 
-    # Never exceed installed capacity.
-    power = np.minimum(
-        power,
+    # Never exceed installed capacity
+    power_kw = np.minimum(
+        power_kw,
         capacity_kw
     )
 
-    return power
+    return power_kw
