@@ -459,11 +459,21 @@ def get_dashboard_state() -> dict:
         ),
         "minBatteryReserve": battery["reserve"],
         "dieselMaxOutput": _number(config["diesel"]["capacity_kw"]),
-        "planningHorizon": len(dispatch_frame),
-        "dieselAvailability": (
-            "Available" if float(config["diesel"]["capacity_kw"]) > 0 else "Unavailable"
+        "planningHorizon": int(
+            config["optimization"].get("planning_horizon_hours", len(dispatch_frame))
         ),
-        "forecastUpdateInterval": None,
+        "dieselAvailability": (
+            "Available"
+            if bool(
+                config["diesel"].get(
+                    "available", float(config["diesel"]["capacity_kw"]) > 0
+                )
+            )
+            else "Unavailable"
+        ),
+        "forecastUpdateInterval": int(
+            config["optimization"].get("forecast_update_interval_minutes", 15)
+        ),
         "location": config["location"],
         "households": config["community"]["households"],
         "source": "microgrid_config.yaml",

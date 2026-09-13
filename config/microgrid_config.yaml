@@ -9,13 +9,14 @@ battery:
   capacity_kwh: 500
   max_charge_kw: 150
   max_discharge_kw: 150
-  min_soc: 0.20
+  min_soc: 0.2
   max_soc: 0.95
-  initial_soc: 0.60
+  initial_soc: 0.6
   charge_efficiency: 0.95
   discharge_efficiency: 0.95
 diesel:
-  capacity_kw: 250
+  available: true
+  capacity_kw: 250.0
   minimum_output_kw: 50
   fuel_l_per_kwh: 0.25
   fuel_price_inr_per_l: 90
@@ -25,4 +26,6 @@ renewables:
   wind_capacity_kw: 150
 optimization:
   emission_weight: 0.5
-  reserve_margin: 0.10
+  reserve_margin: 0.1
+  planning_horizon_hours: 24
+  forecast_update_interval_minutes: 15

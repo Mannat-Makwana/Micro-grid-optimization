@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Off-grid microgrid model configuration and status">
 <title>System Configuration · Microgrid Energy Optimizer</title>
-<link rel="stylesheet" href="css/style.css?v=20240913">
+<link rel="stylesheet" href="css/style.css?v=20240914">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="js/api.js?v=20240913"></script>
-<script src="js/app.js?v=20240913" defer></script>
+<script src="js/api.js?v=20240915"></script>
+<script src="js/app.js?v=20240915" defer></script>
+<script src="js/scroll-effects.js?v=20240914" defer></script>
 </head>
 <body data-page="system">
 <div class="app-shell">
@@ -31,13 +32,14 @@
 <header class="page-head"><div><div class="eyebrow">Configuration</div><h2>System</h2><p>Live configuration loaded from the microgrid model</p></div><div class="timestamp">Configuration source<br><strong id="configSource">—</strong></div></header>
 <div class="grid settings-grid">
  <article class="card setting"><h3>Optimization Preference</h3><label for="preference"><span>Cost</span><span>Emissions</span></label><input class="range" id="preference" type="range" min="0" max="100" step="5" value="55"><div class="metric-sub" id="preferenceValue"></div></article>
- <article class="card setting"><h3>Minimum Battery Reserve</h3><label for="reserveInput"><span>Configured SOC</span><strong>%</strong></label><input class="select" id="reserveInput" type="number" min="0" max="100" value="40"></article>
+ <article class="card setting"><h3>Minimum Battery Reserve</h3><label for="reserveInput"><span>Configured SOC</span><strong>%</strong></label><input class="select" id="reserveInput" type="number" min="0" max="60" step="1" value="20"></article>
  <article class="card setting"><h3>Diesel Maximum Output</h3><label for="dieselInput"><span>Generator limit</span><strong>kW</strong></label><input class="select" id="dieselInput" type="number" min="0" max="500" value="100"></article>
- <article class="card setting"><h3>Planning Horizon</h3><label for="horizonInput"><span>Rolling horizon</span><strong>hours</strong></label><input class="select" id="horizonInput" type="number" min="1" max="72" value="24"></article>
+ <article class="card setting"><h3>Planning Horizon</h3><label for="horizonInput"><span>Rolling horizon</span><strong>hours</strong></label><input class="select" id="horizonInput" type="number" min="6" max="24" value="24"></article>
  <article class="card setting"><h3>Diesel Availability</h3><label for="dieselAvailability"><span>Operating state</span></label><select class="select" id="dieselAvailability"><option>Available</option><option>Unavailable</option></select></article>
- <article class="card setting"><h3>Forecast Update Interval</h3><label for="intervalInput"><span>Refresh cadence</span><strong>minutes</strong></label><input class="select" id="intervalInput" type="number" min="5" max="60" value="15"></article>
+ <article class="card setting"><h3>Forecast Update Interval</h3><label for="intervalInput"><span>Refresh cadence</span><strong>minutes</strong></label><input class="select" id="intervalInput" type="number" min="1" max="1440" value="15"></article>
 </div>
-<article class="card section-gap"><div class="card-head"><h3>System Configuration</h3><span>Read-only model configuration</span></div><div class="card-body"><div class="system-list">
+<div class="setting-actions section-gap"><div><strong id="settingsStatus">Loading configuration…</strong><span>Changes are persisted to the model configuration.</span></div><div><button type="button" class="ghost-button" id="reloadSettings">Reload</button><button type="button" class="primary-button" id="saveSettings">Save configuration</button></div></div>
+<article class="card section-gap"><div class="card-head"><h3>System Configuration</h3><span>Saved model configuration</span></div><div class="card-body"><div class="system-list">
  <div class="system-row"><span>Community</span><strong id="systemLocation">—</strong></div>
  <div class="system-row"><span>Households</span><strong id="households">—</strong></div>
  <div class="system-row"><span>Optimization Preference</span><strong id="preferenceValueRow">—</strong></div>
@@ -50,9 +52,9 @@
  <div class="system-row"><span>Optimizer</span><strong>MILP / MPC</strong></div><div class="system-row"><span>Forecast Model</span><strong>Controller input</strong></div><div class="system-row"><span>Data Feed</span><strong id="systemSource">—</strong></div><div class="system-row"><span>Backend</span><strong data-system-status>Connecting</strong></div>
  </div></div></article>
 <div class="info-box section-gap"><h3>Data lineage</h3><p>These values are loaded from the FastAPI service, which reads the configured microgrid model, forecast input and latest rolling MILP controller output.</p></div>
-<p class="footer-note">Configuration controls are read-only until a persistence endpoint is added.</p>
+<p class="footer-note">Saved settings are used by the next optimization solve. Re-run the rolling controller to refresh the dispatch artifacts.</p>
 </section>
-<script src="js/system.js?v=20240913" defer></script>
+<script src="js/system.js?v=20240915" defer></script>
 
 </main>
 </div>

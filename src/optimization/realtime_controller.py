@@ -67,6 +67,49 @@ MAX_FLEXIBLE_LOAD_KW = 25.0
 DIESEL_FUEL_L_PER_KWH = 0.25
 DIESEL_PRICE_PER_L = 90.0
 DIESEL_CO2_KG_PER_L = 2.68
+PLANNING_HORIZON_HOURS = 24
+
+
+def sync_runtime_config():
+    """Refresh controller constants from the operator configuration."""
+
+    config = optimizer.load_runtime_config()
+    battery = config.get("battery", {})
+    diesel = config.get("diesel", {})
+    optimization = config.get("optimization", {})
+
+    global BATTERY_CAPACITY_KWH
+    global CHARGE_EFFICIENCY
+    global DISCHARGE_EFFICIENCY
+    global MIN_SOC
+    global MAX_SOC
+    global INITIAL_SOC
+    global DIESEL_FUEL_L_PER_KWH
+    global DIESEL_PRICE_PER_L
+    global DIESEL_CO2_KG_PER_L
+    global PLANNING_HORIZON_HOURS
+
+    BATTERY_CAPACITY_KWH = float(battery.get("capacity_kwh", BATTERY_CAPACITY_KWH))
+    CHARGE_EFFICIENCY = float(battery.get("charge_efficiency", CHARGE_EFFICIENCY))
+    DISCHARGE_EFFICIENCY = float(
+        battery.get("discharge_efficiency", DISCHARGE_EFFICIENCY)
+    )
+    MIN_SOC = float(battery.get("min_soc", MIN_SOC))
+    MAX_SOC = float(battery.get("max_soc", MAX_SOC))
+    INITIAL_SOC = float(battery.get("initial_soc", INITIAL_SOC))
+    DIESEL_FUEL_L_PER_KWH = float(
+        diesel.get("fuel_l_per_kwh", DIESEL_FUEL_L_PER_KWH)
+    )
+    DIESEL_PRICE_PER_L = float(
+        diesel.get("fuel_price_inr_per_l", DIESEL_PRICE_PER_L)
+    )
+    DIESEL_CO2_KG_PER_L = float(
+        diesel.get("co2_kg_per_l", DIESEL_CO2_KG_PER_L)
+    )
+    PLANNING_HORIZON_HOURS = int(
+        optimization.get("planning_horizon_hours", PLANNING_HORIZON_HOURS)
+    )
+    return config
 
 
 # ============================================================
@@ -261,6 +304,7 @@ def consume_flexible_energy(remaining_energy, executed_power_kw, duration_hours=
 
 def run_controller():
 
+    sync_runtime_config()
     df = load_forecast()
 
     total_hours = len(df)
@@ -304,7 +348,7 @@ def run_controller():
     for current_index in range(total_hours):
 
         horizon = (
-            df.iloc[current_index:]
+            df.iloc[current_index:current_index + PLANNING_HORIZON_HOURS]
             .copy()
             .reset_index(drop=True)
         )

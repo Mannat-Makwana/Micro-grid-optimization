@@ -7,11 +7,15 @@ const API_BASE = window.MICROGRID_API_BASE || (
 let dashboardStatePromise;
 let forecastStatePromise;
 
-async function requestJson(path) {
+async function requestJson(path, options = {}) {
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: { Accept: "application/json" },
+      ...options,
+      headers: {
+        Accept: "application/json",
+        ...(options.headers || {}),
+      },
     });
   } catch (error) {
     throw new Error(`Cannot reach the backend at ${API_BASE}. Start FastAPI with: uvicorn api.main:app --reload`);
@@ -55,6 +59,13 @@ const api = {
       throw error;
     });
   },
+  async updateSystemSettings(settings) {
+    return requestJson("/system/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  },
   async getDispatchPlan() {
     return (await getDashboardState()).dispatch;
   },
@@ -65,7 +76,7 @@ const api = {
     return (await getDashboardState()).alerts;
   },
   async getSystemSettings() {
-    return (await getDashboardState()).settings;
+    return requestJson("/system/settings");
   },
   async getSystemStatus() {
     return (await getDashboardState()).system;

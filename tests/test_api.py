@@ -9,3 +9,4 @@ def test_api_registers_operational_routes():
     assert "/forecast/health" in paths
     assert "/forecast/next-24h" in paths
     assert "/what-if/health" in paths
+    assert "/system/settings" in paths

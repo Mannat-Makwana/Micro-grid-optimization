@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pulp
+import yaml
 
 
 # ============================================================
@@ -16,6 +17,7 @@ INPUT_FILE = Path(
 OUTPUT_FILE = Path(
     "data/processed/optimization_result_flexible_24h.csv"
 )
+CONFIG_FILE = Path(__file__).resolve().parents[2] / "config" / "microgrid_config.yaml"
 
 
 # ============================================================
@@ -88,6 +90,79 @@ DIESEL_DUMP_LOAD_PENALTY = 0.1
 # ============================================================
 
 TOLERANCE = 1e-4
+
+
+def load_runtime_config(config_path=CONFIG_FILE):
+    """Apply the persisted operator settings before a solve.
+
+    The solver keeps its historical module-level defaults for backwards
+    compatibility, then refreshes them from the shared YAML configuration for
+    every public solve. This makes API and controller runs use the same saved
+    settings without changing the solver's public call signature.
+    """
+
+    with Path(config_path).open("r", encoding="utf-8") as handle:
+        config = yaml.safe_load(handle) or {}
+
+    battery = config.get("battery", {})
+    diesel = config.get("diesel", {})
+    optimization = config.get("optimization", {})
+
+    global BATTERY_CAPACITY_KWH
+    global BATTERY_MAX_CHARGE_KW
+    global BATTERY_MAX_DISCHARGE_KW
+    global BATTERY_CHARGE_EFFICIENCY
+    global BATTERY_DISCHARGE_EFFICIENCY
+    global BATTERY_MIN_SOC
+    global BATTERY_MAX_SOC
+    global INITIAL_SOC
+    global DIESEL_CAPACITY_KW
+    global DIESEL_MIN_OUTPUT_KW
+    global DIESEL_FUEL_L_PER_KWH
+    global DIESEL_FUEL_PRICE_PER_L
+    global DIESEL_CO2_KG_PER_L
+    global DIESEL_COST_WEIGHT
+    global CO2_PENALTY
+
+    BATTERY_CAPACITY_KWH = float(battery.get("capacity_kwh", BATTERY_CAPACITY_KWH))
+    BATTERY_MAX_CHARGE_KW = float(battery.get("max_charge_kw", BATTERY_MAX_CHARGE_KW))
+    BATTERY_MAX_DISCHARGE_KW = float(
+        battery.get("max_discharge_kw", BATTERY_MAX_DISCHARGE_KW)
+    )
+    BATTERY_CHARGE_EFFICIENCY = float(
+        battery.get("charge_efficiency", BATTERY_CHARGE_EFFICIENCY)
+    )
+    BATTERY_DISCHARGE_EFFICIENCY = float(
+        battery.get("discharge_efficiency", BATTERY_DISCHARGE_EFFICIENCY)
+    )
+    BATTERY_MIN_SOC = float(battery.get("min_soc", BATTERY_MIN_SOC))
+    BATTERY_MAX_SOC = float(battery.get("max_soc", BATTERY_MAX_SOC))
+    INITIAL_SOC = float(battery.get("initial_soc", INITIAL_SOC))
+
+    available = bool(diesel.get("available", True))
+    configured_capacity = float(diesel.get("capacity_kw", DIESEL_CAPACITY_KW))
+    DIESEL_CAPACITY_KW = configured_capacity if available else 0.0
+    DIESEL_MIN_OUTPUT_KW = (
+        min(float(diesel.get("minimum_output_kw", DIESEL_MIN_OUTPUT_KW)), DIESEL_CAPACITY_KW)
+        if available
+        else 0.0
+    )
+    DIESEL_FUEL_L_PER_KWH = float(
+        diesel.get("fuel_l_per_kwh", DIESEL_FUEL_L_PER_KWH)
+    )
+    DIESEL_FUEL_PRICE_PER_L = float(
+        diesel.get("fuel_price_inr_per_l", DIESEL_FUEL_PRICE_PER_L)
+    )
+    DIESEL_CO2_KG_PER_L = float(
+        diesel.get("co2_kg_per_l", DIESEL_CO2_KG_PER_L)
+    )
+
+    emission_weight = min(
+        1.0, max(0.0, float(optimization.get("emission_weight", 0.5)))
+    )
+    DIESEL_COST_WEIGHT = max(0.05, 1.0 - emission_weight)
+    CO2_PENALTY = 10.0 * emission_weight
+    return config
 
 
 # ============================================================
@@ -1806,6 +1881,8 @@ def solve_microgrid(
     """
     if df is None or len(df) == 0:
         raise ValueError("Optimization dataframe is empty.")
+
+    load_runtime_config()
 
     df = df.copy().reset_index(drop=True)
 

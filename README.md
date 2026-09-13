@@ -38,5 +38,10 @@ http://127.0.0.1:8000/ or http://127.0.0.1:8000/forecast.html. The frontend has
 no mock-data fallback; if generated files are missing, it displays the API
 error and explains what to run.
 
+The System page saves operator settings through `PUT /system/settings` into
+`config/microgrid_config.yaml`. The next optimization solve reloads those
+values; rerun `python -m src.optimization.realtime_controller` to regenerate
+the rolling dispatch CSV with the updated settings.
+
 If you prefer a separate static server, run `python -m http.server 8080
 --directory frontend` and keep FastAPI running on port 8000.

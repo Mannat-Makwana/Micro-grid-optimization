@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from api.routes.dashboard import router as dashboard_router
 from api.routes.forecast import router as forecast_router
 from api.routes.optimization import router as optimization_router
+from api.routes.system import router as system_router
 from api.routes.what_if import router as what_if_router
 
 
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(dashboard_router)
 app.include_router(forecast_router)
 app.include_router(optimization_router)
+app.include_router(system_router)
 app.include_router(what_if_router)
 
 # Serve the dashboard from the same FastAPI process as the API. This removes
