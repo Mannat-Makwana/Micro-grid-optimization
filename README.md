@@ -31,8 +31,12 @@ Start the controller before opening the dashboard:
 ```bash
 python -m src.optimization.realtime_controller
 uvicorn api.main:app --reload
-python -m http.server 8080 --directory frontend
 ```
 
-Open http://127.0.0.1:8080/index.html. The frontend has no mock-data fallback;
-if generated files are missing, it displays the API error and explains what to run.
+FastAPI now serves the frontend and API from one origin. Open
+http://127.0.0.1:8000/ or http://127.0.0.1:8000/forecast.html. The frontend has
+no mock-data fallback; if generated files are missing, it displays the API
+error and explains what to run.
+
+If you prefer a separate static server, run `python -m http.server 8080
+--directory frontend` and keep FastAPI running on port 8000.

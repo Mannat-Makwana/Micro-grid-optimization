@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if(menu) menu.addEventListener("click", () => sidebar.classList.toggle("open"));
   loadSystemChrome();
 });
+let systemRetryTimer;
 function formatNumber(n){ return new Intl.NumberFormat("en-IN").format(n); }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 
@@ -33,6 +34,9 @@ async function loadSystemChrome(){
       element.textContent = "Data unavailable";
     });
     showDataError(error);
+    if (!systemRetryTimer) {
+      systemRetryTimer = window.setInterval(loadSystemChrome, 5000);
+    }
   }
 }
 

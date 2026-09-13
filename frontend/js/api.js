@@ -1,11 +1,21 @@
 /* Live API boundary for every dashboard page. */
-const API_BASE = window.MICROGRID_API_BASE || "http://127.0.0.1:8000";
+const API_BASE = window.MICROGRID_API_BASE || (
+  window.location.protocol.startsWith("http") && window.location.port === "8000"
+    ? window.location.origin
+    : "http://127.0.0.1:8000"
+);
 let dashboardStatePromise;
+let forecastStatePromise;
 
 async function requestJson(path) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: "application/json" },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: { Accept: "application/json" },
+    });
+  } catch (error) {
+    throw new Error(`Cannot reach the backend at ${API_BASE}. Start FastAPI with: uvicorn api.main:app --reload`);
+  }
 
   let payload = null;
   try {
@@ -25,7 +35,10 @@ function getDashboardState() {
   if (!dashboardStatePromise) {
     dashboardStatePromise = requestJson("/dashboard/state");
   }
-  return dashboardStatePromise;
+  return dashboardStatePromise.catch((error) => {
+    dashboardStatePromise = null;
+    throw error;
+  });
 }
 
 const api = {
@@ -34,7 +47,13 @@ const api = {
     return (await getDashboardState()).current;
   },
   async getForecast() {
-    return (await getDashboardState()).forecast;
+    if (!forecastStatePromise) {
+      forecastStatePromise = requestJson("/forecast/next-24h");
+    }
+    return forecastStatePromise.catch((error) => {
+      forecastStatePromise = null;
+      throw error;
+    });
   },
   async getDispatchPlan() {
     return (await getDashboardState()).dispatch;
