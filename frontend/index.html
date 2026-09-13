@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Professional off-grid microgrid energy management prototype">
+<meta name="description" content="Off-grid microgrid energy management dashboard">
 <title>Microgrid Dashboard · Microgrid Energy Optimizer</title>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="js/mockData.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -23,41 +22,41 @@
     <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
     <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
   </nav>
-  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Connecting</span></div><small>FastAPI · controller-backed</small></div>
 </aside>
 <main class="main">
-<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div class="topbar-context" data-system-name>Microgrid</div><div class="topbar-right"><span data-data-source>Controller data</span><span class="system-pill"><span class="dot"></span><span data-system-pill>Connecting</span></span></div></header>
 
 <section class="page">
-<header class="page-head"><div><div class="eyebrow">Operations overview</div><h2>Microgrid Dashboard</h2><p>Real-time energy overview and optimized dispatch</p></div><div class="timestamp">Current system time<br><strong data-current-time></strong></div></header>
+<header class="page-head"><div><div class="eyebrow">Operations overview</div><h2>Microgrid Dashboard</h2><p>Controller-backed energy overview and optimized dispatch</p></div><div class="timestamp">Latest controller interval<br><strong data-current-time></strong></div></header>
 <div class="grid metrics">
- <article class="card metric"><div class="metric-top"><span>Current Demand</span><span class="metric-tag">Actual</span></div><div class="metric-value" id="demand">—</div><div class="metric-sub">Live site load</div></article>
- <article class="card metric"><div class="metric-top"><span>Solar</span><span class="metric-tag">Actual</span></div><div class="metric-value" id="solar">—</div><div class="metric-sub" id="solarAvail">—</div><div class="progress"><span class="bar-solar" id="solarBar"></span></div></article>
- <article class="card metric"><div class="metric-top"><span>Wind</span><span class="metric-tag">Actual</span></div><div class="metric-value" id="wind">—</div><div class="metric-sub" id="windAvail">—</div><div class="progress"><span class="bar-wind" id="windBar"></span></div></article>
+ <article class="card metric"><div class="metric-top"><span>Controller Demand</span><span class="metric-tag">Plan</span></div><div class="metric-value" id="demand">—</div><div class="metric-sub">Latest scheduled interval</div></article>
+ <article class="card metric"><div class="metric-top"><span>Solar</span><span class="metric-tag">Plan</span></div><div class="metric-value" id="solar">—</div><div class="metric-sub" id="solarAvail">—</div><div class="progress"><span class="bar-solar" id="solarBar"></span></div></article>
+ <article class="card metric"><div class="metric-top"><span>Wind</span><span class="metric-tag">Plan</span></div><div class="metric-value" id="wind">—</div><div class="metric-sub" id="windAvail">—</div><div class="progress"><span class="bar-wind" id="windBar"></span></div></article>
  <article class="card metric"><div class="metric-top"><span>Battery</span><span class="metric-tag">Current</span></div><div class="metric-value" id="soc">—</div><div class="metric-sub" id="batteryPower">—</div><div class="progress"><span class="bar-battery" id="batteryBar"></span></div></article>
- <article class="card metric"><div class="metric-top"><span>Diesel</span><span class="metric-tag">Actual</span></div><div class="metric-value" id="diesel">—</div><div class="metric-sub">Residual generation</div></article>
- <article class="card metric"><div class="metric-top"><span>Operating Cost</span><span class="metric-tag">Estimate</span></div><div class="metric-value" id="cost">—</div><div class="metric-sub">Current operating rate</div></article>
- <article class="card metric"><div class="metric-top"><span>CO₂</span><span class="metric-tag">Estimate</span></div><div class="metric-value" id="co2">—</div><div class="metric-sub">Current emissions rate</div></article>
+ <article class="card metric"><div class="metric-top"><span>Diesel</span><span class="metric-tag">Plan</span></div><div class="metric-value" id="diesel">—</div><div class="metric-sub">Residual generation</div></article>
+ <article class="card metric"><div class="metric-top"><span>Operating Cost</span><span class="metric-tag">Calculated</span></div><div class="metric-value" id="cost">—</div><div class="metric-sub">Latest scheduled interval</div></article>
+ <article class="card metric"><div class="metric-top"><span>CO₂</span><span class="metric-tag">Calculated</span></div><div class="metric-value" id="co2">—</div><div class="metric-sub">Latest scheduled interval</div></article>
  <article class="card metric"><div class="metric-top"><span>Battery Reserve</span><span class="metric-tag">Limit</span></div><div class="metric-value" id="reserve">—</div><div class="metric-sub">Configured minimum SOC</div></article>
 </div>
 <div class="grid two-col">
- <article class="card"><div class="card-head"><h3>Current Energy Mix</h3><span>Actual · 120 kW demand</span></div><div class="card-body energy-layout">
-  <div class="donut-wrap"><div class="donut" aria-label="Energy mix donut chart"></div><div class="donut-center"><strong>120 kW</strong><small>Current demand</small></div></div>
+ <article class="card"><div class="card-head"><h3>Controller Energy Mix</h3><span>Latest scheduled interval</span></div><div class="card-body energy-layout">
+  <div class="donut-wrap"><div class="donut" aria-label="Energy mix donut chart"></div><div class="donut-center"><strong id="mixDemand">—</strong><small>Scheduled demand</small></div></div>
   <div class="legend">
-   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--solar)"></i>Solar</span><strong>42 kW · 35%</strong></div>
-   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--wind)"></i>Wind</span><strong>28 kW · 23%</strong></div>
-   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--battery)"></i>Battery discharge</span><strong>24 kW · 20%</strong></div>
-   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--diesel)"></i>Diesel</span><strong>26 kW · 22%</strong></div>
+   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--solar)"></i>Solar</span><strong id="mixSolar">—</strong></div>
+   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--wind)"></i>Wind</span><strong id="mixWind">—</strong></div>
+   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--battery)"></i>Battery discharge</span><strong id="mixBattery">—</strong></div>
+   <div class="legend-row"><span class="legend-name"><i class="swatch" style="background:var(--diesel)"></i>Diesel</span><strong id="mixDiesel">—</strong></div>
   </div>
  </div></article>
  <article class="card recommendation"><div class="card-head"><h3>Optimizer Recommendation</h3><span>Recommended dispatch</span></div><div class="card-body">
-  <div class="dispatch-list"><span>Solar</span><strong>42 kW</strong><span>Wind</span><strong>28 kW</strong><span>Battery</span><strong>24 kW ↓</strong><span>Diesel</span><strong>26 kW</strong></div>
+  <div class="dispatch-list"><span>Solar</span><strong id="recommendSolar">—</strong><span>Wind</span><strong id="recommendWind">—</strong><span>Battery</span><strong id="recommendBattery">—</strong><span>Diesel</span><strong id="recommendDiesel">—</strong></div>
   <p class="explain" id="why">Loading recommendation rationale…</p>
  </div></article>
 </div>
 <article class="card chart-card"><div class="card-head"><h3>24-Hour Dispatch Outlook</h3><span>Forecast / planned · not actual measurements</span></div><div class="chart-container"><canvas id="dispatchChart" aria-label="24-hour dispatch outlook"></canvas></div></article>
 <article class="card section-gap"><div class="card-head"><h3>Alerts &amp; Notices</h3><span>Current operating conditions</span></div><div class="card-body"><div class="alert-list" id="alerts"></div></div></article>
-<p class="footer-note">Prototype · Mock data service · Optimization Engine: Not Connected</p>
+<p class="footer-note">Source: rolling MILP controller output · Values are planned/model-derived, not telemetry.</p>
 </section>
 <script src="js/dashboard.js" defer></script>
 

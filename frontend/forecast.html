@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Professional off-grid microgrid energy management prototype">
-<title>24-Hour Forecast · Microgrid Energy Optimizer</title>
+<meta name="description" content="Off-grid microgrid demand and renewable forecast">
+<title>Forecast Intelligence · Microgrid Energy Optimizer</title>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="js/mockData.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -23,24 +22,41 @@
     <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
     <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
   </nav>
-  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Connecting</span></div><small>FastAPI · controller-backed</small></div>
 </aside>
 <main class="main">
-<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div class="topbar-context" data-system-name>Microgrid</div><div class="topbar-right"><span data-data-source>Forecast data</span><span class="system-pill"><span class="dot"></span><span data-system-pill>Connecting</span></span></div></header>
 
 <section class="page">
-<header class="page-head"><div><div class="eyebrow">Forecasting</div><h2>24-Hour Forecast</h2><p>Predicted demand and renewable generation</p></div><div class="timestamp">Forecast updated<br><strong>10 minutes ago</strong></div></header>
+<header class="page-head"><div><div class="eyebrow">Forecasting</div><h2>Forecast intelligence</h2><p>Historical operating context, weather drivers, and the next 24-hour horizon</p></div><div class="timestamp"><span>Pipeline refresh</span><br><strong id="forecastUpdated">—</strong><br><small id="browserClock">Browser time —</small></div></header>
+<div class="forecast-meta-grid">
+ <article class="card forecast-meta"><small>Historical context</small><strong id="historyWindow">—</strong><span>Last available 7-day pipeline window</span></article>
+ <article class="card forecast-meta"><small>Forecast horizon</small><strong id="forecastWindow">—</strong><span id="forecastTimezone">Timezone —</span></article>
+ <article class="card forecast-meta"><small>Historical coverage</small><strong id="historyCoverage">—</strong><span id="historySource">Source —</span></article>
+ <article class="card forecast-meta"><small>Forecast source</small><strong id="forecastSource">—</strong><span id="weatherSource">Weather source —</span></article>
+</div>
 <div class="grid stat-grid">
  <article class="card stat"><small>Electricity Demand · Current</small><strong id="demandCurrent">—</strong></article><article class="card stat"><small>Peak demand</small><strong id="demandPeak">—</strong></article><article class="card stat"><small>Average demand</small><strong id="demandAvg">—</strong></article>
  <article class="card stat"><small>Solar · Current</small><strong id="solarCurrent">—</strong></article><article class="card stat"><small>Solar peak</small><strong id="solarPeak">—</strong></article><article class="card stat"><small>Solar average</small><strong id="solarAvg">—</strong></article>
  <article class="card stat"><small>Wind · Current</small><strong id="windCurrent">—</strong></article><article class="card stat"><small>Wind peak</small><strong id="windPeak">—</strong></article><article class="card stat"><small>Wind average</small><strong id="windAvg">—</strong></article>
 </div>
-<article class="card chart-card"><div class="card-head"><h3>Combined 24-Hour Forecast</h3><span>Predicted values · model output</span></div><div class="chart-container"><canvas id="forecastChart"></canvas></div></article>
-<div class="grid two-col section-gap">
- <article class="card"><div class="card-head"><h3>Demand Forecast</h3><span>Predicted load</span></div><div class="card-body"><p class="explain">Expected site demand rises into the evening peak, reaching the highest load around 20:00 before declining overnight.</p></div></article>
- <article class="card"><div class="card-head"><h3>Renewable Forecast</h3><span>Predicted availability</span></div><div class="card-body"><p class="explain">Solar availability peaks around midday. Wind remains comparatively steady, providing a baseline renewable contribution across the day.</p></div></article>
+<div class="forecast-toolbar card">
+ <div><strong>Explore the forecast</strong><span>Switch between historical context, the forecast horizon, and weather inputs.</span></div>
+ <div class="forecast-controls" role="tablist" aria-label="Forecast chart view">
+  <button type="button" class="view-button active" data-forecast-view="context">7D + 24H</button>
+  <button type="button" class="view-button" data-forecast-view="horizon">Next 24H</button>
+  <button type="button" class="view-button" data-forecast-view="weather">Weather inputs</button>
+ </div>
 </div>
-<p class="footer-note">Forecast is distinct from optimized dispatch. The eventual ML model will predict demand, solar availability and wind availability.</p>
+<article class="card chart-card forecast-panel" data-view-panel="context"><div class="card-head"><div><h3>Last 7 days + next 24 hours</h3><span>Solid lines are historical; dashed lines are the upcoming model horizon</span></div><span id="contextBoundaryLabel">Forecast boundary —</span></div><div class="chart-container forecast-chart"><canvas id="forecastContextChart"></canvas></div><div class="chart-footnote"><span class="line-key solid"></span>Historical pipeline values <span class="line-key dashed"></span>Next 24-hour forecast</div></article>
+<article class="card chart-card forecast-panel" data-view-panel="horizon" hidden><div class="card-head"><div><h3>Next 24-hour forecast signals</h3><span>All energy forecasts passed into the optimization input</span></div><span id="horizonLabel">—</span></div><div class="chart-container forecast-chart"><canvas id="forecastDetailChart"></canvas></div></article>
+<article class="card chart-card forecast-panel" data-view-panel="weather" hidden><div class="card-head"><div><h3>Weather and renewable drivers</h3><span>Inputs available from the weather forecast stage</span></div><span id="weatherChartStatus">—</span></div><div class="chart-container forecast-chart" id="weatherChartWrap"><canvas id="weatherChart"></canvas><div class="chart-empty" id="weatherUnavailable" hidden>Weather forecast values were not generated by the pipeline for this horizon.</div></div></article>
+<div class="grid two-col section-gap">
+ <article class="card"><div class="card-head"><h3>Demand Forecast</h3><span>Predicted load and flexible demand</span></div><div class="card-body"><p class="explain" id="demandNote">Loading forecast range…</p><div class="mini-stat-grid"><div><small>Fixed load</small><strong id="fixedLoadSummary">—</strong></div><div><small>Flexible baseline</small><strong id="flexibleLoadSummary">—</strong></div><div><small>Shift capacity</small><strong id="shiftSummary">—</strong></div></div></div></article>
+ <article class="card"><div class="card-head"><h3>Renewable Forecast</h3><span>Predicted availability</span></div><div class="card-body"><p class="explain" id="renewableNote">Loading renewable range…</p><div class="mini-stat-grid"><div><small>Solar energy</small><strong id="solarEnergySummary">—</strong></div><div><small>Wind energy</small><strong id="windEnergySummary">—</strong></div><div><small>Rainfall</small><strong id="rainSummary">—</strong></div></div></div></article>
+</div>
+<article class="card section-gap forecast-table-card"><div class="card-head"><div><h3>Hourly forecast detail</h3><span>Demand, flexible load, renewable availability, and weather fields</span></div><button type="button" class="ghost-button" id="downloadForecast">Export CSV</button></div><div class="table-wrap"><table class="data-table forecast-table"><thead><tr><th>Date / time</th><th>Demand</th><th>Fixed</th><th>Flex baseline</th><th>Solar</th><th>Wind</th><th>Renewable</th><th>Surplus</th><th>Temp</th><th>Humidity</th><th>Cloud</th><th>Rain</th><th>GHI</th><th>Wind speed</th><th>Wind direction</th></tr></thead><tbody id="forecastRows"><tr><td colspan="15">Loading forecast rows…</td></tr></tbody></table></div></article>
+<p class="footer-note">Forecast values are generated by the project pipeline. Historical values come from the latest available processed window; no telemetry or missing-weather values are substituted.</p>
 </section>
 <script src="js/forecast.js" defer></script>
 

@@ -77,6 +77,11 @@ BATTERY_THROUGHPUT_COST = 0.01
 # Reliability must dominate every other objective
 UNSERVED_LOAD_PENALTY = 100000.0
 
+# If a diesel generator's minimum output is above the instantaneous load,
+# the excess must go somewhere.  A small dump-load penalty lets the model keep
+# the lights on without allowing dump load to replace renewable curtailment.
+DIESEL_DUMP_LOAD_PENALTY = 0.1
+
 
 # ============================================================
 # NUMERICAL TOLERANCE
@@ -182,9 +187,34 @@ def load_input():
 # CREATE MILP
 # ============================================================
 
-def build_model(df):
+def build_model(
+    df,
+    terminal_soc_target=None,
+    remaining_flexible_energy=None,
+    prevent_diesel_charging=True,
+    initial_soc=None
+):
 
     n = len(df)
+
+    # Keep the model self-contained.  The rolling controller supplies the
+    # current SOC explicitly; falling back to the module default preserves the
+    # original standalone API.
+    starting_soc = (
+        INITIAL_SOC
+        if initial_soc is None
+        else float(initial_soc)
+    )
+
+    if not (
+        BATTERY_MIN_SOC - TOLERANCE
+        <= starting_soc
+        <= BATTERY_MAX_SOC + TOLERANCE
+    ):
+        raise ValueError(
+            "initial_soc must be between the battery minimum and maximum "
+            f"SOC ({BATTERY_MIN_SOC:.2f}-{BATTERY_MAX_SOC:.2f})."
+        )
 
     model = pulp.LpProblem(
         "Microgrid_Flexible_Load_Optimization",
@@ -306,6 +336,14 @@ def build_model(df):
         for t in range(n)
     }
 
+    diesel_dump_load = {
+        t: pulp.LpVariable(
+            f"diesel_dump_load_{t}",
+            lowBound=0
+        )
+        for t in range(n)
+    }
+
 
     # ========================================================
     # UNSERVED LOAD
@@ -325,7 +363,7 @@ def build_model(df):
     # ========================================================
 
     model += (
-        soc[0] == INITIAL_SOC,
+        soc[0] == starting_soc,
         "initial_soc"
     )
 
@@ -372,31 +410,74 @@ def build_model(df):
     FLEXIBLE_START_HOUR = 6
     FLEXIBLE_END_HOUR = 18
 
-    # Total flexible energy must remain unchanged.
-    model += (
-        pulp.lpSum(
-            flexible_load[t]
-            for t in range(n)
+    # In a standalone 24-hour optimization, preserve the baseline
+    # flexible energy. In rolling MPC, use the explicitly carried
+    # remaining energy instead.
+    if remaining_flexible_energy is None:
+        flexible_energy_target = float(
+            df["flexible_load_baseline_kW"].sum()
         )
-        ==
-        df["flexible_load_baseline_kW"].sum(),
+    else:
+        flexible_energy_target = float(remaining_flexible_energy)
 
-        "flexible_energy_conservation"
-    )
+    if flexible_energy_target < -TOLERANCE:
+        raise ValueError("remaining_flexible_energy cannot be negative.")
 
     # Flexible loads cannot operate outside the allowed window.
+    eligible = []
     for t in range(n):
+        hour = int(df.loc[t, "timestamp"].hour)
+        is_eligible = (
+            FLEXIBLE_START_HOUR <= hour <= FLEXIBLE_END_HOUR
+        )
+        eligible.append(is_eligible)
 
-        hour = df.loc[t, "timestamp"].hour
-
-        if (
-            hour < FLEXIBLE_START_HOUR
-            or hour > FLEXIBLE_END_HOUR
-        ):
+        if not is_eligible:
             model += (
                 flexible_load[t] == 0,
                 f"flexible_load_off_window_{t}"
             )
+
+    eligible_capacity = sum(
+        MAX_FLEXIBLE_LOAD_KW for x in eligible if x
+    )
+
+    if flexible_energy_target > eligible_capacity + TOLERANCE:
+        raise ValueError(
+            "Flexible energy target is infeasible for the remaining "
+            "operating window: "
+            f"target={flexible_energy_target:.3f} kWh, "
+            f"capacity={eligible_capacity:.3f} kWh."
+        )
+
+    model += (
+        pulp.lpSum(flexible_load[t] for t in range(n))
+        == flexible_energy_target,
+        "flexible_energy_conservation"
+    )
+
+    # Rolling-horizon feasibility: do not consume so much flexible
+    # energy early that the remaining target cannot fit in future
+    # eligible hours. This is the key MPC fix.
+    cumulative_flexible = 0
+    for t in range(n):
+        cumulative_flexible = cumulative_flexible + flexible_load[t]
+
+        future_capacity = sum(
+            MAX_FLEXIBLE_LOAD_KW
+            for j in range(t + 1, n)
+            if eligible[j]
+        )
+
+        max_cumulative_allowed = max(
+            0.0,
+            flexible_energy_target - future_capacity
+        )
+
+        model += (
+            cumulative_flexible <= max_cumulative_allowed + TOLERANCE,
+            f"flexible_future_feasibility_{t}"
+        )
 
 
     # ========================================================
@@ -504,13 +585,21 @@ def build_model(df):
     # TERMINAL SOC
     # ========================================================
 
-    # The battery must finish with at least its initial SOC.
-    #
-    # This prevents the optimizer from simply emptying the
-    # battery during the 24-hour optimization horizon.
+    # Terminal SOC is configurable for rolling MPC.
+    # Default remains the initial SOC for standalone optimization.
+    if terminal_soc_target is None:
+        terminal_soc = starting_soc
+    else:
+        terminal_soc = float(terminal_soc_target)
+
+    if not (BATTERY_MIN_SOC - TOLERANCE <= terminal_soc <= BATTERY_MAX_SOC + TOLERANCE):
+        raise ValueError(
+            f"terminal_soc_target must be between "
+            f"{BATTERY_MIN_SOC:.2f} and {BATTERY_MAX_SOC:.2f}."
+        )
 
     model += (
-        soc[n] >= INITIAL_SOC,
+        soc[n] >= terminal_soc,
         "terminal_soc"
     )
 
@@ -543,6 +632,23 @@ def build_model(df):
             f"diesel_min_{t}"
         )
 
+        if prevent_diesel_charging:
+            model += (
+                battery_charge[t]
+                <= BATTERY_MAX_CHARGE_KW * (1 - diesel_on[t]),
+                f"no_diesel_charging_{t}"
+            )
+
+        # Excess diesel output can be sent to a controllable dump load when
+        # the generator minimum exceeds community demand.  Dump load is tied
+        # to diesel operation so it cannot make renewable curtailment look
+        # like useful generation.
+        model += (
+            diesel_dump_load[t]
+            <= DIESEL_CAPACITY_KW * diesel_on[t],
+            f"diesel_dump_limit_{t}"
+        )
+
 
     # ========================================================
     # ENERGY BALANCE
@@ -571,7 +677,9 @@ def build_model(df):
 
             total_load
             +
-            battery_charge[t],
+            battery_charge[t]
+            +
+            diesel_dump_load[t],
 
             f"energy_balance_{t}"
         )
@@ -656,6 +764,11 @@ def build_model(df):
         for t in range(n)
     )
 
+    diesel_dump = pulp.lpSum(
+        diesel_dump_load[t]
+        for t in range(n)
+    )
+
 
     # --------------------------------------------------------
     # FINAL OBJECTIVE
@@ -690,6 +803,12 @@ def build_model(df):
         BATTERY_THROUGHPUT_COST
         *
         battery_throughput
+
+        +
+
+        DIESEL_DUMP_LOAD_PENALTY
+        *
+        diesel_dump
 
         +
 
@@ -781,6 +900,9 @@ def build_model(df):
         "diesel_on":
             diesel_on,
 
+        "diesel_dump_load":
+            diesel_dump_load,
+
         "unserved_load":
             unserved_load
     }
@@ -806,23 +928,21 @@ def solve_model(model, verbose=True):
         solver
     )
 
-    objective_value = pulp.value(
-        model.objective
-    )
-
-    print(
-        f"\nObjective value: "
-        f"{objective_value:.6f}"
-    )
-
     status_name = pulp.LpStatus[
         model.status
     ]
 
-    print(
-        f"\nSolver status: "
-        f"{status_name}"
-    )
+    if verbose:
+        objective_value = pulp.value(model.objective)
+        print(
+            f"\nObjective value: "
+            f"{objective_value:.6f}"
+        )
+
+        print(
+            f"\nSolver status: "
+            f"{status_name}"
+        )
 
     if status_name != "Optimal":
 
@@ -962,6 +1082,13 @@ def extract_results(
                     ][t]
                 ),
 
+            "diesel_dump_load_kW":
+                pulp.value(
+                    variables[
+                        "diesel_dump_load"
+                    ][t]
+                ),
+
             "unserved_load_kW":
                 pulp.value(
                     variables[
@@ -977,7 +1104,7 @@ def extract_results(
 # VALIDATION
 # ============================================================
 
-def validate_solution(result):
+def validate_solution(result, expected_flexible_energy=None):
 
     print("\n")
     print("=" * 60)
@@ -1066,6 +1193,8 @@ def validate_solution(result):
         result["total_load_kW"]
         +
         result["battery_charge_kW"]
+        +
+        result["diesel_dump_load_kW"]
     )
 
     balance_error = (
@@ -1110,22 +1239,15 @@ def validate_solution(result):
     # Flexible load energy conservation
     # --------------------------------------------------------
 
-    flexible_baseline = (
-        result[
-            "flexible_load_baseline_kW"
-        ].sum()
-    )
+    if expected_flexible_energy is None:
+        flexible_target = result["flexible_load_baseline_kW"].sum()
+    else:
+        flexible_target = float(expected_flexible_energy)
 
-    flexible_scheduled = (
-        result[
-            "flexible_load_scheduled_kW"
-        ].sum()
-    )
+    flexible_scheduled = result["flexible_load_scheduled_kW"].sum()
 
     flexible_energy_error = abs(
-        flexible_baseline
-        -
-        flexible_scheduled
+        flexible_target - flexible_scheduled
     )
 
     # Flexible load must remain inside the operating window.
@@ -1342,6 +1464,12 @@ def print_summary(result):
         ].sum()
     )
 
+    diesel_dump = (
+        result[
+            "diesel_dump_load_kW"
+        ].sum()
+    )
+
     diesel_fuel = (
         diesel_generation
         *
@@ -1492,6 +1620,11 @@ def print_summary(result):
     print(
         f"Diesel generation: "
         f"{diesel_generation:.2f} kWh"
+    )
+
+    print(
+        f"Diesel dump load: "
+        f"{diesel_dump:.2f} kWh"
     )
 
     print(
@@ -1652,6 +1785,97 @@ def main():
     )
 
     print("=" * 60)
+
+
+# ============================================================
+# REUSABLE SOLVER API
+# ============================================================
+
+def solve_microgrid(
+    df,
+    initial_soc=None,
+    verbose=False,
+    save_result=False,
+    terminal_soc_target=None,
+    remaining_flexible_energy=None,
+    prevent_diesel_charging=True
+):
+    """Solve one microgrid optimization horizon.
+
+    Designed for both standalone 24-hour optimization and rolling MPC.
+    """
+    if df is None or len(df) == 0:
+        raise ValueError("Optimization dataframe is empty.")
+
+    df = df.copy().reset_index(drop=True)
+
+    required = [
+        "timestamp", "fixed_load_kW",
+        "flexible_load_baseline_kW",
+        "solar_available_kW", "wind_available_kW",
+        "renewable_available_kW"
+    ]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    try:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timestamp must contain valid datetime values.") from exc
+
+    if df["timestamp"].isna().any():
+        raise ValueError("timestamp must contain valid datetime values.")
+
+    if df["timestamp"].duplicated().any():
+        raise ValueError("Duplicate timestamps detected.")
+
+    numeric_columns = [
+        "fixed_load_kW",
+        "flexible_load_baseline_kW",
+        "solar_available_kW",
+        "wind_available_kW",
+        "renewable_available_kW",
+    ]
+    for column in numeric_columns:
+        values = pd.to_numeric(df[column], errors="coerce")
+        if values.isna().any() or not np.isfinite(values).all():
+            raise ValueError(f"{column} must contain finite numeric values.")
+        if (values < 0).any():
+            raise ValueError(f"{column} cannot contain negative values.")
+        df[column] = values.astype(float)
+
+    if remaining_flexible_energy is not None:
+        remaining_flexible_energy = float(remaining_flexible_energy)
+        if not np.isfinite(remaining_flexible_energy):
+            raise ValueError("remaining_flexible_energy must be finite.")
+        if remaining_flexible_energy < -TOLERANCE:
+            raise ValueError("remaining_flexible_energy cannot be negative.")
+
+    if initial_soc is not None:
+        initial_soc = float(initial_soc)
+        if not np.isfinite(initial_soc):
+            raise ValueError("initial_soc must be finite.")
+
+    model, variables = build_model(
+        df,
+        terminal_soc_target=terminal_soc_target,
+        remaining_flexible_energy=remaining_flexible_energy,
+        prevent_diesel_charging=prevent_diesel_charging,
+        initial_soc=initial_soc,
+    )
+    solve_model(model, verbose=verbose)
+    result = extract_results(df, variables)
+    validate_solution(
+        result,
+        expected_flexible_energy=remaining_flexible_energy
+    )
+
+    if save_result:
+        OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(OUTPUT_FILE, index=False)
+
+    return result
 
 
 # ============================================================

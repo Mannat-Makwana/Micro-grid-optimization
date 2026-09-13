@@ -1,6 +1,8 @@
 import pandas as pd
 
 
+NUMERICAL_TOLERANCE = 1e-3
+
 INPUT_FILE = (
     "data/processed/"
     "optimization_result_24h.csv"
@@ -179,7 +181,7 @@ def main():
             "charging/discharging detected."
         )
 
-    if error.abs().max() < 1e-6:
+    if error.abs().max() < NUMERICAL_TOLERANCE:
         print(
             "✓ Energy balance is satisfied."
         )

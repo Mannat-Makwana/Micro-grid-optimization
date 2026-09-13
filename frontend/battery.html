@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Professional off-grid microgrid energy management prototype">
+<meta name="description" content="Off-grid microgrid battery operations">
 <title>Battery Management · Microgrid Energy Optimizer</title>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="js/mockData.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -23,14 +22,14 @@
     <a href="battery.html" data-page="battery"><span class="nav-icon">▮</span>Battery</a>
     <a href="system.html" data-page="system"><span class="nav-icon">⚙</span>System</a>
   </nav>
-  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Online</span></div><small>System status · Prototype</small></div>
+  <div class="sidebar-status"><div class="status-line"><span class="dot"></span><span data-system-status>Connecting</span></div><small>FastAPI · controller-backed</small></div>
 </aside>
 <main class="main">
-<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div></div><div class="topbar-right"><span>Rural Microgrid A</span><span class="system-pill"><span class="dot"></span>System Online</span></div></header>
+<header class="topbar"><button class="mobile-menu" aria-label="Open navigation">☰</button><div class="topbar-context" data-system-name>Microgrid</div><div class="topbar-right"><span data-data-source>Battery data</span><span class="system-pill"><span class="dot"></span><span data-system-pill>Connecting</span></span></div></header>
 
 <section class="page">
 <header class="page-head"><div><div class="eyebrow">Storage operations</div><h2>Battery Management</h2><p>State of charge, limits and planned energy shifting</p></div><div class="timestamp">Current state<br><strong id="batteryState">Discharging</strong></div></header>
-<div class="card"><div class="card-head"><h3>Current Battery State</h3><span>Actual · 200 kWh system</span></div><div class="card-body battery-hero">
+<div class="card"><div class="card-head"><h3>Controller Battery State</h3><span>Latest scheduled interval</span></div><div class="card-body battery-hero">
  <div class="soc-ring"><div class="soc-center"><strong id="batterySoc">—</strong><span>State of charge</span></div></div>
  <div class="detail-grid">
   <div class="detail"><small>Battery Capacity</small><strong id="capacity">—</strong></div><div class="detail"><small>Available Energy</small><strong id="available">—</strong></div><div class="detail"><small>Current Power</small><strong id="power">—</strong></div>
@@ -39,7 +38,7 @@
 </div></div>
 <article class="card chart-card"><div class="card-head"><h3>24-Hour Battery SOC</h3><span>Planned trajectory</span></div><div class="chart-container"><canvas id="socChart"></canvas></div></article>
 <div class="info-box section-gap"><h3>Battery role in the optimization</h3><p>The optimizer uses the battery to shift renewable energy across time while maintaining the configured reserve. Discharge can reduce diesel dependence during high-demand periods; charging can absorb renewable energy that would otherwise be curtailed.</p></div>
-<p class="footer-note">SOC trajectory is planned mock data. Actual battery telemetry will come from the future microgrid data feed.</p>
+<p class="footer-note">Source: rolling MILP controller output · Battery values are planned/model-derived, not telemetry.</p>
 </section>
 <script src="js/battery.js" defer></script>
 

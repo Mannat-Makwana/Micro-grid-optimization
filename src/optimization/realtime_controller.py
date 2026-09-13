@@ -1,18 +1,23 @@
 """
 Real-Time Microgrid Controller
 --------------------------------
-Rolling-horizon controller for the off-grid Kutch microgrid.
+Rolling-horizon MPC controller for the off-grid Kutch microgrid.
 
 At every hour:
 1. Take the current battery SOC.
-2. Build the remaining forecast horizon.
-3. Solve the MILP.
-4. Execute only the first hour of the optimized dispatch.
-5. Update battery SOC.
-6. Move to the next hour.
+2. Take the remaining flexible-load energy requirement.
+3. Build the remaining forecast horizon.
+4. Solve the MILP.
+5. Execute only the first optimized hour.
+6. Update battery SOC and remaining flexible energy.
+7. Re-optimize at the next hour.
 
-The optimizer's detailed CBC/MILP output is suppressed here so that
-the terminal shows only the important real-time dispatch information.
+The important MPC state variables carried between iterations are:
+    - battery SOC
+    - remaining flexible-load energy
+
+This prevents the rolling horizon from becoming infeasible because
+flexible demand was shifted too aggressively into early hours.
 """
 
 import contextlib
@@ -36,18 +41,32 @@ OUTPUT_FILE = Path(
     "data/processed/realtime_controller_result.csv"
 )
 
-# Rolling horizon settings
-CONTROL_STEP_HOURS = 1
+CONTROL_STEP_HOURS = 1.0
+NUMERICAL_TOLERANCE = 1e-3
 
-# Battery parameters
+# Battery
 BATTERY_CAPACITY_KWH = 500.0
 CHARGE_EFFICIENCY = 0.95
 DISCHARGE_EFFICIENCY = 0.95
-
 MIN_SOC = 0.20
 MAX_SOC = 0.95
-
 INITIAL_SOC = 0.60
+
+# Rolling MPC terminal reserve.
+# We only require the battery to finish each shrinking horizon
+# at the minimum allowed SOC. This avoids forcing the battery
+# back to 60% at every rolling step.
+TERMINAL_SOC_TARGET = MIN_SOC
+
+# Flexible-load operating window used by the MILP.
+FLEXIBLE_START_HOUR = 6
+FLEXIBLE_END_HOUR = 18
+MAX_FLEXIBLE_LOAD_KW = 25.0
+
+# Diesel parameters for final summary.
+DIESEL_FUEL_L_PER_KWH = 0.25
+DIESEL_PRICE_PER_L = 90.0
+DIESEL_CO2_KG_PER_L = 2.68
 
 
 # ============================================================
@@ -55,7 +74,7 @@ INITIAL_SOC = 0.60
 # ============================================================
 
 def load_forecast():
-    """Load the 24-hour optimization forecast."""
+    """Load and validate the rolling optimization input."""
 
     print("=" * 60)
     print("REAL-TIME MICROGRID CONTROLLER")
@@ -78,7 +97,8 @@ def load_forecast():
 
     required_columns = [
         "timestamp",
-        "load_kW",
+        "fixed_load_kW",
+        "flexible_load_baseline_kW",
         "solar_available_kW",
         "wind_available_kW",
         "renewable_available_kW",
@@ -94,6 +114,38 @@ def load_forecast():
             f"Missing required columns: {missing}"
         )
 
+    if df["timestamp"].duplicated().any():
+        raise ValueError(
+            "Duplicate timestamps detected in forecast."
+        )
+
+    if len(df) == 0:
+        raise ValueError("Forecast is empty.")
+
+    numeric_columns = [
+        "fixed_load_kW",
+        "flexible_load_baseline_kW",
+        "solar_available_kW",
+        "wind_available_kW",
+        "renewable_available_kW",
+    ]
+    for column in numeric_columns:
+        if df[column].isna().any():
+            raise ValueError(f"Missing values detected in {column}.")
+        if (df[column] < 0).any():
+            raise ValueError(f"Negative values detected in {column}.")
+
+    renewable_error = (
+        df["renewable_available_kW"]
+        - df["solar_available_kW"]
+        - df["wind_available_kW"]
+    ).abs().max()
+    if renewable_error > NUMERICAL_TOLERANCE:
+        raise ValueError(
+            "renewable_available_kW must equal solar_available_kW "
+            f"+ wind_available_kW (maximum error {renewable_error:.6f} kW)."
+        )
+
     return df
 
 
@@ -107,16 +159,7 @@ def update_soc(
     discharge_kw,
     duration_hours=1.0
 ):
-    """
-    Update battery SOC after executing one control interval.
-
-    SOC equation:
-
-        SOC(t+1) =
-            SOC(t)
-            + eta_charge * P_charge * dt / E
-            - P_discharge * dt / (eta_discharge * E)
-    """
+    """Update SOC using the same equation as the MILP."""
 
     charge_energy = (
         charge_kw
@@ -136,13 +179,80 @@ def update_soc(
 
     new_soc = current_soc + delta_soc
 
-    # Numerical safety
-    new_soc = max(
-        MIN_SOC,
-        min(MAX_SOC, new_soc)
+    # Numerical protection only. The MILP itself enforces the bounds.
+    if new_soc < MIN_SOC - 1e-6:
+        raise RuntimeError(
+            f"Executed dispatch drove SOC below minimum: {new_soc:.6f}"
+        )
+
+    if new_soc > MAX_SOC + 1e-6:
+        raise RuntimeError(
+            f"Executed dispatch drove SOC above maximum: {new_soc:.6f}"
+        )
+
+    return max(MIN_SOC, min(MAX_SOC, new_soc))
+
+
+# ============================================================
+# FLEXIBLE ENERGY HELPERS
+# ============================================================
+
+def eligible_flexible_hours(df):
+    """Return a boolean mask for the allowed flexible-load window."""
+
+    hours = df["timestamp"].dt.hour
+
+    return (
+        (hours >= FLEXIBLE_START_HOUR)
+        & (hours <= FLEXIBLE_END_HOUR)
     )
 
-    return new_soc
+
+def validate_remaining_flexible_energy(
+    remaining_energy,
+    horizon
+):
+    """Check that remaining flex energy can still fit in the horizon."""
+
+    eligible = eligible_flexible_hours(horizon)
+
+    future_capacity = (
+        eligible.sum()
+        * MAX_FLEXIBLE_LOAD_KW
+    )
+
+    if remaining_energy < -NUMERICAL_TOLERANCE:
+        raise RuntimeError(
+            "Remaining flexible energy became negative."
+        )
+
+    if remaining_energy <= NUMERICAL_TOLERANCE:
+        return 0.0
+
+    if remaining_energy > future_capacity + NUMERICAL_TOLERANCE:
+        raise RuntimeError(
+            "Remaining flexible energy is no longer schedulable: "
+            f"remaining={remaining_energy:.3f} kWh, "
+            f"capacity={future_capacity:.3f} kWh."
+        )
+
+    return float(remaining_energy)
+
+
+def consume_flexible_energy(remaining_energy, executed_power_kw, duration_hours=1.0):
+    """Advance the rolling flexible-energy state safely at solver precision."""
+
+    if remaining_energy < -NUMERICAL_TOLERANCE:
+        raise RuntimeError("Remaining flexible energy became negative.")
+    if executed_power_kw < -NUMERICAL_TOLERANCE:
+        raise ValueError("Executed flexible-load power cannot be negative.")
+
+    remaining = max(
+        0.0,
+        float(remaining_energy)
+        - float(executed_power_kw) * float(duration_hours),
+    )
+    return 0.0 if remaining <= NUMERICAL_TOLERANCE else remaining
 
 
 # ============================================================
@@ -157,19 +267,34 @@ def run_controller():
 
     print(f"\nTotal forecast hours: {total_hours}")
     print(
-        f"Initial battery SOC: "
-        f"{INITIAL_SOC * 100:.2f}%"
+        f"Initial battery SOC: {INITIAL_SOC * 100:.2f}%"
+    )
+    print(
+        f"Rolling terminal SOC target: "
+        f"{TERMINAL_SOC_TARGET * 100:.2f}%"
     )
 
-    print("\nStarting rolling optimization...\n")
-
     # --------------------------------------------------------
-    # Current battery state
+    # Initial MPC state
     # --------------------------------------------------------
 
     current_soc = INITIAL_SOC
 
-    # Store actual executed dispatch
+    # This is the amount of shiftable energy that has not yet
+    # been physically executed. It is carried between MPC solves.
+    remaining_flexible_energy = float(
+        df["flexible_load_baseline_kW"].sum()
+    )
+
+    initial_flexible_energy = remaining_flexible_energy
+
+    print(
+        f"Initial flexible energy: "
+        f"{initial_flexible_energy:.2f} kWh"
+    )
+
+    print("\nStarting rolling optimization...\n")
+
     controller_results = []
 
     # --------------------------------------------------------
@@ -178,13 +303,8 @@ def run_controller():
 
     for current_index in range(total_hours):
 
-        # Remaining forecast horizon
-        horizon_end = total_hours
-
         horizon = (
-            df.iloc[
-                current_index:horizon_end
-            ]
+            df.iloc[current_index:]
             .copy()
             .reset_index(drop=True)
         )
@@ -192,52 +312,75 @@ def run_controller():
         if horizon.empty:
             break
 
+        # Make sure the remaining flexible requirement can still
+        # be completed in the remaining operating window.
+        remaining_flexible_energy = validate_remaining_flexible_energy(
+            remaining_flexible_energy,
+            horizon
+        )
+
         # ----------------------------------------------------
-        # Solve MILP
-        #
-        # The optimizer prints:
-        #   Solving MILP...
-        #   Solver status...
-        #   Validation...
-        #
-        # We suppress those messages here.
+        # Solve the MILP/MPC problem.
         # ----------------------------------------------------
 
-        with contextlib.redirect_stdout(
-            io.StringIO()
-        ):
-
+        with contextlib.redirect_stdout(io.StringIO()):
             result = optimizer.solve_microgrid(
                 df=horizon,
                 initial_soc=current_soc,
-                save_result=False
+                terminal_soc_target=TERMINAL_SOC_TARGET,
+                remaining_flexible_energy=remaining_flexible_energy,
+                save_result=False,
+                verbose=False,
+                prevent_diesel_charging=True,
+            )
+
+        if result.empty:
+            raise RuntimeError(
+                "MILP returned an empty result."
             )
 
         # ----------------------------------------------------
-        # First-hour dispatch
-        #
-        # MPC / rolling horizon only executes the FIRST
-        # optimized interval.
+        # Execute ONLY first hour.
         # ----------------------------------------------------
 
         first = result.iloc[0]
 
         timestamp = first["timestamp"]
 
-        # ----------------------------------------------------
-        # Extract dispatch
-        # ----------------------------------------------------
+        fixed_load_kw = float(
+            first["fixed_load_kW"]
+        )
 
-        load_kw = float(
+        flexible_kw = float(
+            first["flexible_load_scheduled_kW"]
+        )
+
+        total_load_kw = float(
             first["total_load_kW"]
+        )
+
+        solar_available_kw = float(
+            first["solar_available_kW"]
         )
 
         solar_kw = float(
             first["solar_used_kW"]
         )
 
+        solar_curtailed_kw = float(
+            first["solar_curtailed_kW"]
+        )
+
+        wind_available_kw = float(
+            first["wind_available_kW"]
+        )
+
         wind_kw = float(
             first["wind_used_kW"]
+        )
+
+        wind_curtailed_kw = float(
+            first["wind_curtailed_kW"]
         )
 
         charge_kw = float(
@@ -252,8 +395,16 @@ def run_controller():
             first["diesel_kW"]
         )
 
+        diesel_dump_kw = float(
+            first["diesel_dump_load_kW"]
+        )
+
+        unserved_kw = float(
+            first["unserved_load_kW"]
+        )
+
         # ----------------------------------------------------
-        # Update battery SOC using ACTUAL executed dispatch
+        # Update physical state.
         # ----------------------------------------------------
 
         new_soc = update_soc(
@@ -263,48 +414,70 @@ def run_controller():
             duration_hours=CONTROL_STEP_HOURS
         )
 
+        # Flexible load is energy over one hour, so kW == kWh
+        # for the one-hour control interval.
+        remaining_flexible_energy = consume_flexible_energy(
+            remaining_flexible_energy,
+            flexible_kw,
+            CONTROL_STEP_HOURS,
+        )
+
+        # Numerical cleanup at the end of the horizon.
+        if current_index == total_hours - 1:
+            if abs(remaining_flexible_energy) <= 1e-3:
+                remaining_flexible_energy = 0.0
+
         # ----------------------------------------------------
-        # Store executed result
+        # Store executed dispatch.
         # ----------------------------------------------------
 
         controller_results.append(
             {
                 "timestamp": timestamp,
-                "load_kW": load_kw,
+                "fixed_load_kW": fixed_load_kw,
+                "flexible_load_scheduled_kW": flexible_kw,
+                "load_kW": total_load_kw,
+                "solar_available_kW": solar_available_kw,
                 "solar_used_kW": solar_kw,
+                "solar_curtailed_kW": solar_curtailed_kw,
+                "wind_available_kW": wind_available_kw,
                 "wind_used_kW": wind_kw,
+                "wind_curtailed_kW": wind_curtailed_kw,
                 "battery_charge_kW": charge_kw,
                 "battery_discharge_kW": discharge_kw,
                 "diesel_kW": diesel_kw,
+                "diesel_dump_load_kW": diesel_dump_kw,
+                "unserved_load_kW": unserved_kw,
                 "battery_soc": new_soc,
+                "remaining_flexible_energy_kWh": remaining_flexible_energy,
             }
         )
 
         # ----------------------------------------------------
-        # Display only the important real-time information
+        # Display dispatch.
         # ----------------------------------------------------
 
         print(
             f"{timestamp} | "
-            f"Load={load_kw:6.2f} kW | "
+            f"Load={total_load_kw:6.2f} kW | "
+            f"Flex={flexible_kw:5.2f} kW | "
             f"Solar={solar_kw:6.2f} kW | "
             f"Wind={wind_kw:5.2f} kW | "
             f"Charge={charge_kw:6.2f} kW | "
             f"Discharge={discharge_kw:6.2f} kW | "
             f"Diesel={diesel_kw:6.2f} kW | "
-            f"SOC={new_soc * 100:5.2f}%"
+            f"Dump={diesel_dump_kw:5.2f} kW | "
+            f"SOC={new_soc * 100:5.2f}% | "
+            f"FlexRem={remaining_flexible_energy:6.2f} kWh"
         )
 
-        # Move to next control interval
         current_soc = new_soc
 
     # ========================================================
-    # CREATE RESULT DATAFRAME
+    # RESULT DATAFRAME
     # ========================================================
 
-    results_df = pd.DataFrame(
-        controller_results
-    )
+    results_df = pd.DataFrame(controller_results)
 
     if results_df.empty:
         raise RuntimeError(
@@ -312,7 +485,37 @@ def run_controller():
         )
 
     # ========================================================
-    # SAVE RESULTS
+    # FINAL VALIDATION
+    # ========================================================
+
+    total_flexible_executed = (
+        results_df["flexible_load_scheduled_kW"]
+        * CONTROL_STEP_HOURS
+    ).sum()
+
+    flexible_energy_error = abs(
+        initial_flexible_energy
+        - total_flexible_executed
+    )
+
+    if flexible_energy_error > 1e-3:
+        raise RuntimeError(
+            "Final flexible-load energy conservation failed: "
+            f"error={flexible_energy_error:.6f} kWh"
+        )
+
+    final_remaining_flexible = float(
+        results_df["remaining_flexible_energy_kWh"].iloc[-1]
+    )
+
+    if abs(final_remaining_flexible) > 1e-3:
+        raise RuntimeError(
+            "Flexible load was not fully executed by the end: "
+            f"{final_remaining_flexible:.6f} kWh remains."
+        )
+
+    # ========================================================
+    # SAVE
     # ========================================================
 
     OUTPUT_FILE.parent.mkdir(
@@ -329,39 +532,54 @@ def run_controller():
     # SUMMARY
     # ========================================================
 
-    total_load = results_df["load_kW"].sum()
+    total_load = results_df["load_kW"].sum() * CONTROL_STEP_HOURS
 
     solar_used = (
         results_df["solar_used_kW"].sum()
+        * CONTROL_STEP_HOURS
     )
 
     wind_used = (
         results_df["wind_used_kW"].sum()
+        * CONTROL_STEP_HOURS
     )
 
-    renewable_used = (
-        solar_used + wind_used
-    )
+    renewable_used = solar_used + wind_used
 
     battery_charge = (
         results_df["battery_charge_kW"].sum()
+        * CONTROL_STEP_HOURS
     )
 
     battery_discharge = (
         results_df["battery_discharge_kW"].sum()
+        * CONTROL_STEP_HOURS
     )
 
     diesel_generation = (
         results_df["diesel_kW"].sum()
+        * CONTROL_STEP_HOURS
     )
 
-    # --------------------------------------------------------
-    # Diesel calculations
-    # --------------------------------------------------------
+    diesel_dump = (
+        results_df["diesel_dump_load_kW"].sum()
+        * CONTROL_STEP_HOURS
+    )
 
-    DIESEL_FUEL_L_PER_KWH = 0.25
-    DIESEL_PRICE_PER_L = 90.0
-    DIESEL_CO2_KG_PER_L = 2.68
+    unserved_energy = (
+        results_df["unserved_load_kW"].sum()
+        * CONTROL_STEP_HOURS
+    )
+
+    solar_curtailed = (
+        results_df["solar_curtailed_kW"].sum()
+        * CONTROL_STEP_HOURS
+    )
+
+    wind_curtailed = (
+        results_df["wind_curtailed_kW"].sum()
+        * CONTROL_STEP_HOURS
+    )
 
     diesel_fuel = (
         diesel_generation
@@ -378,153 +596,78 @@ def run_controller():
         * DIESEL_CO2_KG_PER_L
     )
 
-    # --------------------------------------------------------
-    # Contributions
-    # --------------------------------------------------------
+    renewable_contribution = (
+        renewable_used / total_load * 100
+        if total_load > 0 else 0.0
+    )
 
-    if total_load > 0:
+    diesel_contribution = (
+        diesel_generation / total_load * 100
+        if total_load > 0 else 0.0
+    )
 
-        renewable_contribution = (
-            renewable_used
-            / total_load
-            * 100
-        )
+    lpsp = (
+        unserved_energy / total_load * 100
+        if total_load > 0 else 0.0
+    )
 
-        diesel_contribution = (
-            diesel_generation
-            / total_load
-            * 100
-        )
-
-    else:
-
-        renewable_contribution = 0.0
-        diesel_contribution = 0.0
-
-    # ========================================================
-    # FINAL SUMMARY
-    # ========================================================
+    final_soc = float(
+        results_df["battery_soc"].iloc[-1]
+    )
 
     print("\n")
     print("=" * 60)
     print("ROLLING CONTROLLER SUMMARY")
     print("=" * 60)
 
-    print(
-        f"Total load:              "
-        f"{total_load:.2f} kWh"
-    )
-
-    print(
-        f"Solar used:              "
-        f"{solar_used:.2f} kWh"
-    )
-
-    print(
-        f"Wind used:               "
-        f"{wind_used:.2f} kWh"
-    )
-
-    print(
-        f"Renewable used:          "
-        f"{renewable_used:.2f} kWh"
-    )
-
-    print(
-        f"Renewable contribution:  "
-        f"{renewable_contribution:.2f}%"
-    )
+    print(f"Total load:              {total_load:.2f} kWh")
+    print(f"Solar used:              {solar_used:.2f} kWh")
+    print(f"Wind used:               {wind_used:.2f} kWh")
+    print(f"Renewable used:          {renewable_used:.2f} kWh")
+    print(f"Renewable contribution:  {renewable_contribution:.2f}%")
 
     print()
-
-    print(
-        f"Battery charge:          "
-        f"{battery_charge:.2f} kWh"
-    )
-
-    print(
-        f"Battery discharge:       "
-        f"{battery_discharge:.2f} kWh"
-    )
+    print(f"Flexible energy target:  {initial_flexible_energy:.2f} kWh")
+    print(f"Flexible energy executed:{total_flexible_executed:.2f} kWh")
 
     print()
-
-    print(
-        f"Diesel generation:       "
-        f"{diesel_generation:.2f} kWh"
-    )
-
-    print(
-        f"Diesel contribution:     "
-        f"{diesel_contribution:.2f}%"
-    )
-
-    print(
-        f"Diesel fuel:             "
-        f"{diesel_fuel:.2f} L"
-    )
-
-    print(
-        f"Diesel cost:             "
-        f"₹{diesel_cost:.2f}"
-    )
-
-    print(
-        f"CO2 emissions:           "
-        f"{co2_emissions:.2f} kg"
-    )
+    print(f"Battery charge:          {battery_charge:.2f} kWh")
+    print(f"Battery discharge:       {battery_discharge:.2f} kWh")
 
     print()
+    print(f"Diesel generation:       {diesel_generation:.2f} kWh")
+    print(f"Diesel dump load:        {diesel_dump:.2f} kWh")
+    print(f"Diesel contribution:     {diesel_contribution:.2f}%")
+    print(f"Diesel fuel:             {diesel_fuel:.2f} L")
+    print(f"Diesel cost:             ₹{diesel_cost:.2f}")
+    print(f"CO2 emissions:           {co2_emissions:.2f} kg")
 
-    # --------------------------------------------------------
-    # Reliability
-    #
-    # The current controller records no unserved-load column
-    # because the optimizer's first-hour result is assumed
-    # feasible after validation.
-    # --------------------------------------------------------
+    print()
+    print(f"Solar curtailed:         {solar_curtailed:.2f} kWh")
+    print(f"Wind curtailed:          {wind_curtailed:.2f} kWh")
+    print(f"Unserved energy:         {unserved_energy:.6f} kWh")
+    print(f"LPSP:                    {lpsp:.6f}%")
+    print(f"Final battery SOC:       {final_soc * 100:.2f}%")
 
-    unserved_energy = 0.0
+    print()
+    print("Validation:")
+    print(
+        f"  Flexible energy error: {flexible_energy_error:.10f} kWh"
+    )
+    print(
+        f"  Final flexible energy: {final_remaining_flexible:.10f} kWh"
+    )
 
-    if total_load > 0:
-        lpsp = (
-            unserved_energy
-            / total_load
-            * 100
-        )
+    if unserved_energy > 1e-3:
+        print("  WARNING: unserved load is non-zero.")
     else:
-        lpsp = 0.0
-
-    print(
-        f"Unserved energy:         "
-        f"{unserved_energy:.6f} kWh"
-    )
-
-    print(
-        f"LPSP:                    "
-        f"{lpsp:.6f}%"
-    )
-
-    print()
-
-    final_soc = (
-        results_df["battery_soc"].iloc[-1]
-    )
-
-    print(
-        f"Final battery SOC:       "
-        f"{final_soc * 100:.2f}%"
-    )
+        print("  ✓ No unserved energy.")
 
     print("\n" + "=" * 60)
-
-    print("\nResults saved to:")
-    print(OUTPUT_FILE)
-
-    print("\n")
-    print("=" * 60)
     print("REAL-TIME CONTROLLER COMPLETE")
     print("=" * 60)
+    print("\nResults saved to:")
+    print(OUTPUT_FILE)
 
     return results_df
 

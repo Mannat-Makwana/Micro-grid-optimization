@@ -1,20 +1,54 @@
-/*
-  API service boundary. Replace these functions with fetch() calls when FastAPI is ready.
-  UI code should call api.js, never read mockData.js directly.
-*/
+/* Live API boundary for every dashboard page. */
+const API_BASE = window.MICROGRID_API_BASE || "http://127.0.0.1:8000";
+let dashboardStatePromise;
+
+async function requestJson(path) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_) {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const detail = payload?.detail || `API request failed (${response.status})`;
+    throw new Error(detail);
+  }
+  return payload;
+}
+
+function getDashboardState() {
+  if (!dashboardStatePromise) {
+    dashboardStatePromise = requestJson("/dashboard/state");
+  }
+  return dashboardStatePromise;
+}
+
 const api = {
-  async getCurrentMicrogridState(){ return structuredClone(MicrogridMockData.current); },
-  async getForecast(){ return structuredClone(MicrogridMockData.forecast); },
-  async getDispatchPlan(){ return structuredClone(MicrogridMockData.dispatch); },
-  async getBatteryStatus(){
-    const c = MicrogridMockData.current;
-    return {
-      soc:c.batterySoc, capacity:200, availableEnergy:136, power:c.batteryPower,
-      direction:c.batteryDirection, reserve:c.batteryReserve, maxCharge:50, maxDischarge:50,
-      socTrajectory:MicrogridMockData.dispatch.soc
-    };
+  baseUrl: API_BASE,
+  async getCurrentMicrogridState() {
+    return (await getDashboardState()).current;
   },
-  async getAlerts(){ return structuredClone(MicrogridMockData.alerts); },
-  async getSystemSettings(){ return structuredClone(MicrogridMockData.settings); },
-  async getSystemStatus(){ return structuredClone(MicrogridMockData.system); }
+  async getForecast() {
+    return (await getDashboardState()).forecast;
+  },
+  async getDispatchPlan() {
+    return (await getDashboardState()).dispatch;
+  },
+  async getBatteryStatus() {
+    return (await getDashboardState()).battery;
+  },
+  async getAlerts() {
+    return (await getDashboardState()).alerts;
+  },
+  async getSystemSettings() {
+    return (await getDashboardState()).settings;
+  },
+  async getSystemStatus() {
+    return (await getDashboardState()).system;
+  },
 };
